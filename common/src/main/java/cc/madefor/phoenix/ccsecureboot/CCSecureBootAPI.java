@@ -3,16 +3,17 @@ package cc.madefor.phoenix.ccsecureboot;
 import cc.madefor.phoenix.ccsecureboot.mixin.ServerContextAccessor;
 import dan200.computercraft.api.ComputerCraftAPI;
 import dan200.computercraft.api.lua.*;
+import org.apache.commons.io.input.NullInputStream;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.asn1.x509.TBSCertList;
+import org.bouncycastle.cert.X509CRLEntryHolder;
+import org.bouncycastle.cert.X509CRLHolder;
+import org.bouncycastle.cert.X509v2CRLBuilder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
-import org.bouncycastle.crypto.util.PrivateKeyFactory;
-import org.bouncycastle.operator.DefaultDigestAlgorithmIdentifierFinder;
-import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
+import org.bouncycastle.cert.jcajce.*;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
@@ -28,18 +29,21 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
+import java.security.cert.*;
 import java.security.cert.Certificate;
-import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.NamedParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Date;
 
 public class CCSecureBootAPI implements ILuaAPI {
+    private static @Nullable Certificate rootCertificate = null;
+    private static @Nullable PrivateKey rootKey = null;
+    private static @Nullable X509CRLHolder rootCRL = null;
+    private static final Object rootKeyLock = new Object();
+    private static final Object rootCRLLock = new Object();
+
     private final IComputerSystem computer;
-    private @Nullable Certificate rootCertificate = null;
-    private @Nullable PrivateKey rootKey = null;
     private @Nullable String mountPath = null;
 
     public CCSecureBootAPI(IComputerSystem computer) {
@@ -51,7 +55,10 @@ public class CCSecureBootAPI implements ILuaAPI {
         if (rootKey == null) {
             throw new LuaException("An error occurred while loading the root key; check the server logs for more information.");
         }
-        // TODO: should probably check if the computer is already enrolled?
+        var file = computer.getLevel().getServer().getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/enrolled/" + computer.getID()).toFile();
+        if (file.exists()) {
+            throw new LuaException("This computer is already enrolled in secure boot");
+        }
         try {
             var bytes = new byte[pem.remaining()];
             pem.get(bytes);
@@ -77,7 +84,6 @@ public class CCSecureBootAPI implements ILuaAPI {
             writer.writeObject(new PemObject("CERTIFICATE", cert.getEncoded()));
             writer.close();
 
-            var file = computer.getLevel().getServer().getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/enrolled/" + computer.getID()).toFile();
             file.getParentFile().mkdirs();
             file.createNewFile();
             return ByteBuffer.wrap(stream.toByteArray());
@@ -91,7 +97,10 @@ public class CCSecureBootAPI implements ILuaAPI {
         if (rootCertificate == null) {
             return MethodResult.of(false, "An error occurred while loading the root certificate; check the server logs for more information.");
         }
-        // TODO: should probably check if the computer is already unenrolled?
+        var file = computer.getLevel().getServer().getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/enrolled/" + computer.getID()).toFile();
+        if (!file.exists()) {
+            return MethodResult.of(true); // should this report an error?
+        }
         try {
             var certbytes = new byte[certbuf.remaining()];
             certbuf.get(certbytes);
@@ -99,7 +108,11 @@ public class CCSecureBootAPI implements ILuaAPI {
             var certdata = reader.readPemObject();
             reader.close();
             var cert = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(certdata.getContent()));
-            // TODO: check CRL
+            synchronized (rootCRLLock) {
+                if (rootCRL != null && rootCRL.getRevokedCertificate(cert.getSerialNumber()) != null) {
+                    return MethodResult.of(false, "Certificate has been revoked");
+                }
+            }
             cert.verify(rootCertificate.getPublicKey());
 
             var sigbytes = new byte[sigbuf.remaining()];
@@ -117,8 +130,17 @@ public class CCSecureBootAPI implements ILuaAPI {
                 return MethodResult.of(false, "Could not verify signature");
             }
 
-            // TODO: revoke certificate
-            var file = computer.getLevel().getServer().getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/enrolled/" + computer.getID()).toFile();
+            synchronized (rootCRLLock) {
+                if (rootCRL != null) {
+                    var crlBuilder = new X509v2CRLBuilder(rootCRL);
+                    crlBuilder.addCRLEntry(cert.getSerialNumber(), new Date(System.currentTimeMillis()), org.bouncycastle.asn1.x509.CRLReason.superseded);
+                    rootCRL = crlBuilder.build(new JcaContentSignerBuilder("Ed25519").build(rootKey));
+                    var crlfile = computer.getLevel().getServer().getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/revoked.crl").toFile();
+                    PemWriter writer = new PemWriter(new FileWriter(crlfile));
+                    writer.writeObject(new PemObject("X509 CRL", rootCRL.getEncoded()));
+                    writer.close();
+                }
+            }
             return MethodResult.of(file.delete());
         } catch (Exception e) {
             return MethodResult.of(false, e.getMessage());
@@ -140,67 +162,102 @@ public class CCSecureBootAPI implements ILuaAPI {
         ILuaAPI.super.startup();
         var server = computer.getLevel().getServer();
         mountPath = computer.mount("rom/pxboot/certs", ComputerCraftAPI.createSaveDirMount(server, "certs", 0), "certs");
-        PublicKey pk = null;
-        if (rootKey == null) {
-            var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("root.key").toFile();
-            if (file.exists()) {
-                try {
-                    PemReader reader = new PemReader(new FileReader(file));
-                    var pemObject = reader.readPemObject();
-                    reader.close();
-                    var pk8 = new PKCS8EncodedKeySpec(pemObject.getContent());
-                    var factory = KeyFactory.getInstance("Ed25519");
-                    rootKey = factory.generatePrivate(pk8);
-                } catch (Exception e) {
-                    CCSecureBoot.LOG.warn("Failed to read root.key from file: {}", e.getMessage());
+        synchronized (rootKeyLock) {
+            PublicKey pk = null;
+            if (rootKey == null) {
+                var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("root.key").toFile();
+                if (file.exists()) {
+                    try {
+                        PemReader reader = new PemReader(new FileReader(file));
+                        var pemObject = reader.readPemObject();
+                        reader.close();
+                        var pk8 = new PKCS8EncodedKeySpec(pemObject.getContent());
+                        var factory = KeyFactory.getInstance("Ed25519");
+                        rootKey = factory.generatePrivate(pk8);
+                    } catch (Exception e) {
+                        CCSecureBoot.LOG.warn("Failed to read root.key from file: {}", e.getMessage());
+                    }
+                } else {
+                    CCSecureBoot.LOG.info("Creating secure boot root key");
+                    try {
+                        var keypair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+                        rootKey = keypair.getPrivate();
+                        assert rootKey.getFormat().equals("PKCS#8");
+                        pk = keypair.getPublic();
+                        file.getParentFile().mkdirs();
+                        PemWriter writer = new PemWriter(new FileWriter(file));
+                        writer.writeObject(new PemObject("PRIVATE KEY", rootKey.getEncoded()));
+                        writer.close();
+                    } catch (Exception e) {
+                        CCSecureBoot.LOG.error("Could not create private key: {}", e.getMessage());
+                    }
                 }
-            } else {
-                CCSecureBoot.LOG.info("Creating secure boot root key");
-                try {
-                    var keypair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-                    rootKey = keypair.getPrivate();
-                    assert rootKey.getFormat().equals("PKCS#8");
-                    pk = keypair.getPublic();
-                    file.getParentFile().mkdirs();
-                    PemWriter writer = new PemWriter(new FileWriter(file));
-                    writer.writeObject(new PemObject("PRIVATE KEY", rootKey.getEncoded()));
-                    writer.close();
-                } catch (Exception e) {
-                    CCSecureBoot.LOG.error("Could not create private key: {}", e.getMessage());
+            }
+            if (rootKey != null && rootCertificate == null) {
+                var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/root.pem").toFile();
+                if (file.exists()) {
+                    try {
+                        PemReader reader = new PemReader(new FileReader(file));
+                        var pemObject = reader.readPemObject();
+                        reader.close();
+                        rootCertificate = CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(pemObject.getContent()));
+                    } catch (Exception e) {
+                        CCSecureBoot.LOG.warn("Failed to read root.pem from file: {}", e.getMessage());
+                    }
+                } else {
+                    CCSecureBoot.LOG.info("Creating secure boot root certificate");
+                    try {
+                        if (pk == null) {
+                            var generator = KeyPairGenerator.getInstance("Ed25519");
+                            var pk8 = PrivateKeyInfo.getInstance(rootKey.getEncoded());
+                            generator.initialize(new NamedParameterSpec("Ed25519"), new StaticSecureRandom(pk8.getPrivateKey().getOctets()));
+                            pk = generator.generateKeyPair().getPublic();
+                        }
+                        var csrbuilder = new JcaPKCS10CertificationRequestBuilder(new X500Principal("CN=CCSecureBoot Root"), pk);
+                        var csbuilder = new JcaContentSignerBuilder("Ed25519");
+                        var signer = csbuilder.build(rootKey);
+                        var csr = csrbuilder.build(signer);
+                        rootCertificate = sign(csr, rootKey);
+                        file.getParentFile().mkdirs();
+                        PemWriter writer = new PemWriter(new FileWriter(file));
+                        writer.writeObject(new PemObject("CERTIFICATE", rootCertificate.getEncoded()));
+                        writer.close();
+                    } catch (Exception e) {
+                        CCSecureBoot.LOG.error("Could not create certificate: {}", e.getMessage());
+                    }
                 }
             }
         }
-        if (rootKey != null && rootCertificate == null) {
-            var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/root.pem").toFile();
-            if (file.exists()) {
-                try {
-                    PemReader reader = new PemReader(new FileReader(file));
-                    var pemObject = reader.readPemObject();
-                    reader.close();
-                    rootCertificate = CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(pemObject.getContent()));
-                } catch (Exception e) {
-                    CCSecureBoot.LOG.warn("Failed to read root.pem from file: {}", e.getMessage());
-                }
-            } else {
-                CCSecureBoot.LOG.info("Creating secure boot root certificate");
-                try {
-                    if (pk == null) {
-                        var generator = KeyPairGenerator.getInstance("Ed25519");
-                        var pk8 = PrivateKeyInfo.getInstance(rootKey.getEncoded());
-                        generator.initialize(new NamedParameterSpec("Ed25519"), new StaticSecureRandom(pk8.getPrivateKey().getOctets()));
-                        pk = generator.generateKeyPair().getPublic();
+        synchronized (rootCRLLock) {
+            if (rootCRL == null) {
+                var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("certs/revoked.crl").toFile();
+                if (file.exists()) {
+                    try {
+                        PemReader reader = new PemReader(new FileReader(file));
+                        var pemObject = reader.readPemObject();
+                        reader.close();
+                        rootCRL = new X509CRLHolder(pemObject.getContent());
+                    } catch (Exception e) {
+                        CCSecureBoot.LOG.warn("Failed to read revoked.crl from file: {}", e.getMessage());
+                        try {
+                            var builder = new X509v2CRLBuilder(new X500Name("CN=CCSecureBoot Root"), new Date(System.currentTimeMillis()));
+                            var sigGen = new JcaContentSignerBuilder("Ed25519").build(rootKey);
+                            rootCRL = builder.build(sigGen);
+                        } catch (Exception e1) {
+                            CCSecureBoot.LOG.error("Failed to create empty CRL: {}", e1.getMessage());
+                        }
                     }
-                    var csrbuilder = new JcaPKCS10CertificationRequestBuilder(new X500Principal("CN=CCSecureBoot Root"), pk);
-                    var csbuilder = new JcaContentSignerBuilder("Ed25519");
-                    var signer = csbuilder.build(rootKey);
-                    var csr = csrbuilder.build(signer);
-                    rootCertificate = sign(csr, rootKey);
-                    file.getParentFile().mkdirs();
-                    PemWriter writer = new PemWriter(new FileWriter(file));
-                    writer.writeObject(new PemObject("CERTIFICATE", rootCertificate.getEncoded()));
-                    writer.close();
-                } catch (Exception e) {
-                    CCSecureBoot.LOG.error("Could not create certificate: {}", e.getMessage());
+                } else {
+                    try {
+                        var builder = new X509v2CRLBuilder(new X500Name("CN=CCSecureBoot Root"), new Date(System.currentTimeMillis()));
+                        var sigGen = new JcaContentSignerBuilder("Ed25519").build(rootKey);
+                        rootCRL = builder.build(sigGen);
+                        PemWriter writer = new PemWriter(new FileWriter(file));
+                        writer.writeObject(new PemObject("X509 CRL", rootCRL.getEncoded()));
+                        writer.close();
+                    } catch (Exception e1) {
+                        CCSecureBoot.LOG.error("Failed to create empty CRL: {}", e1.getMessage());
+                    }
                 }
             }
         }
@@ -229,16 +286,14 @@ public class CCSecureBootAPI implements ILuaAPI {
     }
 
     // https://www.baeldung.com/java-bouncy-castle-sign-csr
-    private X509Certificate sign(PKCS10CertificationRequest inputCSR, PrivateKey caPrivate) throws IOException, OperatorCreationException, CertificateException, NoSuchProviderException {
-        var sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find("Ed25519");
-        var digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
+    private X509Certificate sign(PKCS10CertificationRequest inputCSR, PrivateKey caPrivate) throws IOException, OperatorCreationException, CertificateException, NoSuchProviderException, NoSuchAlgorithmException, InvalidKeySpecException {
+        var keyInfo = inputCSR.getSubjectPublicKeyInfo();
 
-        var foo = PrivateKeyFactory.createKey(caPrivate.getEncoded());
-        SubjectPublicKeyInfo keyInfo = inputCSR.getSubjectPublicKeyInfo();
-
+        var serial = new byte[32];
+        SecureRandom.getInstanceStrong().nextBytes(serial);
         var myCertificateGenerator = new X509v3CertificateBuilder(
             new X500Name("CN=CCSecureBoot Root"),
-            new BigInteger("1"),
+            new BigInteger(serial),
             new Date(System.currentTimeMillis()),
             new Date(System.currentTimeMillis() + 30L * 365 * 24 * 60 * 60 * 1000),
             inputCSR.getSubject(),

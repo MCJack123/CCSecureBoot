@@ -1037,6 +1037,14 @@ function container.loadX509(data)
     return cert
 end
 
+--- Loads a X.509 CRL file from DER.
+---@param data string The DER to load
+---@return X509CRL crl The loaded X.509 CRL structure
+function container.loadX509CRL(data)
+    local crl = CertificateList.decode(data) ---@type CertificateList
+    return crl
+end
+
 --- Encodes a PKCS#7 structure to DER.
 ---@param pk7 PKCS7 The structure to encode
 ---@return string der The DER representation
@@ -1103,6 +1111,20 @@ end
 ---@return string der The DER representation
 function container.saveX509(cert)
     return Certificate.encode(cert)
+end
+
+--- Encodes the X.509 CRL's to be signed contents to DER.
+---@param crl X509CRL The structure to encode
+---@return string der The DER representation of `toBeSigned`
+function container.encodeX509CRLInnerCertificate(crl)
+    return CertificateListContent.encode(crl.toBeSigned)
+end
+
+--- Encodes a X.509 CRL structure to DER.
+---@param crl X509CRL The structure to encode
+---@return string der The DER representation
+function container.saveX509CRL(crl)
+    return CertificateList.encode(crl)
 end
 
 --- Prints an arbitrary object to the screen.

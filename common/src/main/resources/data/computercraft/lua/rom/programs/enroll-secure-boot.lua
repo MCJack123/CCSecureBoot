@@ -21,6 +21,10 @@ if response:lower() ~= "y" then return end
 
 write("Enter your name: ")
 local name = read()
+while name == "" do
+    write("Name must not be empty.\nEnter your name: ")
+    name = read()
+end
 write("Enter a password for the key (leave blank for no password): ")
 local password = read("\7")
 if password == "" then password = nil end

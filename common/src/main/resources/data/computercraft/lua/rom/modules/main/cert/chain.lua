@@ -8,9 +8,16 @@ local chain = {}
 ---@param cert X509
 ---@param certList X509[]
 ---@param roots X509[]
+---@param revoked ({type: "INTEGER", data: string}|number)[]
 ---@return boolean trusted
 ---@return string|nil reason
-local function chain_validate_internal(cert, certList, roots)
+local function chain_validate_internal(cert, certList, roots, revoked)
+    -- Check that the certificate isn't revoked
+	for _, v in ipairs(revoked) do
+	    if cert.toBeSigned.serialNumber == v or (type(cert.toBeSigned.serialNumber) == "table" and type(v) == "table" and cert.toBeSigned.serialNumber.data == v.data) then
+	        return false, "Certificate was revoked"
+	    end
+	end
     -- Find the issuing certificate
     local parent, isRoot
     for _, v in ipairs(certList) do
@@ -33,7 +40,7 @@ local function chain_validate_internal(cert, certList, roots)
     -- Otherwise, make sure this isn't self-signed so we don't end up in an infinite loop
     if util.compareNames(cert.toBeSigned.subject, cert.toBeSigned.issuer) then return false, "Chain certificate is self-signed" end
     -- Continue validating with the parent
-    return chain_validate_internal(parent, certList, roots)
+    return chain_validate_internal(parent, certList, roots, revoked)
 end
 
 --- Validates a certificate up to a root of trust.
@@ -48,7 +55,7 @@ function chain.validate(cert, certList, rootPath, additionalRoots)
     expect(2, certList, "table", "nil")
     rootPath = expect(3, rootPath, "string", "nil") or "/etc/certs"
     expect(4, additionalRoots, "table", "nil")
-    local roots = {}
+    local roots, revoked = {}, {}
     if additionalRoots then
         for _, v in ipairs(additionalRoots) do roots[#roots+1] = v end
     end
@@ -59,14 +66,25 @@ function chain.validate(cert, certList, rootPath, additionalRoots)
                 if file then
                     local data = file:read("*a")
                     file:close()
-                    if data:match("^%-%-%-%-%-BEGIN") then data = container.decodePEM(data) end
-                    local ok, c = pcall(container.loadX509, data)
-                    if ok then roots[#roots+1] = c end
+                    local type = "CERTIFICATE"
+                    if data:match("^%-%-%-%-%-BEGIN") then data, type = container.decodePEM(data) end
+                    if type == "CERTIFICATE" then
+						local ok, c = pcall(container.loadX509, data)
+						if ok then roots[#roots+1] = c end
+					elseif type == "X509 CRL" then
+                        local ok, c = pcall(container.loadX509CRL, data)
+						if ok and c.toBeSigned.revokedCertificates then
+                            -- TODO: verify signature of CRL
+							for _, v in ipairs(c.toBeSigned.revokedCertificates) do
+								revoked[#revoked+1] = v.serialNumber
+							end
+						end
+					end
                 end
             end
         end
     end
-    return chain_validate_internal(cert, certList or {}, roots)
+    return chain_validate_internal(cert, certList or {}, roots, revoked)
 end
 
 return chain

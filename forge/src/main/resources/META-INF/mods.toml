@@ -25,7 +25,7 @@ displayName="CCSecureBoot" #mandatory
 # A URL to query for updates for this mod. See the JSON update specification <here>
 #updateJSONURL="http://myurl.me/" #optional
 # A URL for the "homepage" for this mod, displayed in the mod UI
-#displayURL="http://example.com/" #optional
+displayURL="https://modrinth.com/mod/ccsecureboot" #optional
 # A file name (in the root of the mod JAR) containing a logo for display
 logoFile="icon.png" #optional
 # A text field displayed in the mod UI
@@ -38,7 +38,7 @@ authors="JackMacWindows" #optional
 # IGNORE_ALL_VERSION means that your mod will not cause a red X if it's present on the client or the server. This is a special case and should only be used if your mod has no server component.
 # NONE means that no display test is set on your mod. You need to do this yourself, see IExtensionPoint.DisplayTest for more information. You can define any scheme you wish with this value.
 # IMPORTANT NOTE: this is NOT an instruction as to which environments (CLIENT or DEDICATED SERVER) your mod loads on. Your mod should load (and maybe do nothing!) whereever it finds itself.
-#displayTest="MATCH_VERSION" # MATCH_VERSION is the default if nothing is specified (#optional)
+displayTest="IGNORE_SERVER_VERSION" # MATCH_VERSION is the default if nothing is specified (#optional)
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
@@ -61,7 +61,7 @@ Implements boot security in CC: Tweaked.
    modId="minecraft"
    mandatory=true
    # This version range declares a minimum of the current minecraft version up to but not including the next major version
-   versionRange="[1.20.1,1.21)"
+   versionRange="[1.20.1,1.20.2)"
    ordering="NONE"
    side="BOTH"
 # Here's another dependency
@@ -69,6 +69,6 @@ Implements boot security in CC: Tweaked.
    modId="computercraft"
    mandatory=true
    # This version range declares a minimum of the current minecraft version up to but not including the next major version
-   versionRange="[1.114.0,)"
+   versionRange="[1.112.0,)"
    ordering="NONE"
-   side="SERVER"
+   side="BOTH"

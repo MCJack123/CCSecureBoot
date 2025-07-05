@@ -24,6 +24,10 @@ if pk8:match "ENCRYPTED PRIVATE KEY" then
     password = read("\7")
 end
 
+if not fs.exists("/rom/pxboot/certs/enrolled/" .. id) then
+    print("The computer is not currently enrolled in secure boot.")
+	return
+end
 write("This will unenroll computer ID " .. id .. " from secure boot, revoking the key in the process. Are you sure you wish to continue? (y/N) ")
 local response = read()
 if response:lower() ~= "y" then return end

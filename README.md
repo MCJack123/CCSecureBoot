@@ -2,7 +2,9 @@
 Implements boot security in CC: Tweaked.
 
 ## Installation
-Simply install a built JAR into your server-side `mods` folder. This mod only operates on the server, so it shouldn't be necessary for clients to have a copy.
+CC: Tweaked 1.112.0 or later must already be installed.
+
+Simply install a built JAR into your `mods` folder. This mod only operates on the server side, so multiplayer clients do not need it installed.
 
 ## Usage
 By default, secure boot is disabled for all computers. To enable secure boot for a computer, run the `enroll-secure-boot` program. This program will generate a new key for the computer, placing it on a floppy disk for safe keeping.
@@ -18,6 +20,33 @@ Secure boot runs on [pxboot](https://github.com/Phoenix-ComputerCraft/pxboot), w
 Secure boot may be disabled for a computer by running `unenroll-secure-boot` on any computer with the key card inserted. The computer is unenrolled by key card, not by computer ID, so a computer which cannot be booted anymore can be unenrolled. The key will be revoked as well, which allows preventing abuse if a key is leaked.
 
 If the key for a computer is lost, there is no way to recover the computer - it will no longer be possible to modify the boot files or unenroll the computer from secure boot. Keep the key disk in a safe place, away from other players.
+
+## Securing your code
+Secure boot only ensures a root of trust going into your program - it does not guarantee that your computer as a whole is safe. It is up to you to make sure your code is secure from hacks, including checking all code that's loaded and avoiding unsafe programs.
+
+When secure boot is enabled, due to the way the boot manager is set up, you are automatically protected from the two most basic bypasses for programs: holding Ctrl+T to terminate to the shell, and inserting a disk with a startup file. You won't have to protect against these in your program (though you should ideally handle `terminate` events safely instead of erroring and restarting).
+
+To help with code signing, CCSecureBoot exposes an easy-to-use library based on the same code that the boot manager uses. Simply call `dofile("/rom/modules/main/codesign.lua")` to gain access to a few functions that make checking signatures easier:
+- `codesign.verify(path)`: Simply verifies the signature of a file, and returns a boolean whether the file is safe.
+- `codesign.execute(cmd, ...)`: A wrapper for `shell.execute` that checks the signature of the command. This doesn't allow ROM programs, however - use normal `shell.execute` to run known safe programs.
+- `codesign.loadfile(path, mode, env)`: A wrapper for `loadfile` that checks the signature of the file. This automatically allows modules in `/rom/modules`, but will not work for the rest of the ROM.
+- `codesign.dofile(path)`: A wrapper for `dofile` that checks the signature of the file. This automatically allows modules in `/rom/modules`, but will not work for the rest of the ROM.
+- `codesign.enforceModuleSigning()`: Requires code signing on all modules loaded through `require`. Call this once at the start of your program - it will stay active for the rest of the program's lifetime. This does not survive inside `codesign.execute`/`shell.execute` calls - call it again inside a new program.
+- `codesign.sign(data, password)`: Generates a signature blob for the data provided. This is in the same format as `.sig` files. The key disk must be inserted, and if the key is password-protected, the password must be provided.
+- `codesign.load(data, sig, name, mode, env)`: A wrapper for `load` that checks the signature of the code, using a provided signature blob.
+
+If your program uses modules via `require`, enable module signing before loading any modules, to make sure they are properly signed and not replaced with untrusted code:
+
+```lua
+-- require could load a local module instead of the one in ROM - always use dofile to load codesign:
+local codesign = dofile "/rom/modules/main/codesign.lua"
+codesign.enforceModuleSigning()
+-- Now require is safe to load external modules:
+local yourmod = require "yourmod"
+-- ...
+```
+
+As a reminder, never load untrusted code through `load` without a restricted environment, especially when the input is from a modem. If you want to load code, give it a highly restricted environment with only the functions required, if any. (Despite the fact that `textutils.unserialize` loads code, it uses an empty environment, so it's considered safe.)
 
 ## Inner workings
 CCSecureBoot uses the PKCS or S/MIME protocol stack for storing cryptographic info, and uses Ed25519 for signatures. Most of the heavy lifting is done by [libcert](https://github.com/Phoenix-ComputerCraft/libcert) and [ccryptolib](https://github.com/migeyel/ccryptolib) on the Lua side, and [Bouncy Castle](https://www.bouncycastle.org) on the Java side.

@@ -43,9 +43,9 @@ allprojects {
 
     dependencies {
         // Vanilla (i.e. for multi-loader systems)
-        compileOnly("cc.tweaked:cc-tweaked-$minecraft_version-common-api:$cctVersion")
-        compileOnly("cc.tweaked:cc-tweaked-$minecraft_version-common:$cctVersion")
-        implementation("org.bouncycastle:bcpkix-jdk18on:1.81")
+        compileOnly "cc.tweaked:cc-tweaked-$minecraft_version-common-api:$cctVersion"
+        compileOnly "cc.tweaked:cc-tweaked-$minecraft_version-common:$cctVersion"
+        implementation "org.bouncycastle:bcpkix-jdk18on:1.81"
     }
 
     tasks.withType(JavaCompile) {

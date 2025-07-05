@@ -5,10 +5,7 @@ import dan200.computercraft.api.ComputerCraftAPI;
 import dan200.computercraft.api.lua.*;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.ASN1OctetString;
-import org.bouncycastle.asn1.pkcs.ContentInfo;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
-import org.bouncycastle.asn1.pkcs.SignedData;
-import org.bouncycastle.asn1.pkcs.SignerInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
@@ -43,6 +40,7 @@ public class CCSecureBootAPI implements ILuaAPI {
     private final IComputerSystem computer;
     private @Nullable Certificate rootCertificate = null;
     private @Nullable PrivateKey rootKey = null;
+    private @Nullable String mountPath = null;
 
     public CCSecureBootAPI(IComputerSystem computer) {
         this.computer = computer;
@@ -141,7 +139,7 @@ public class CCSecureBootAPI implements ILuaAPI {
     public void startup() {
         ILuaAPI.super.startup();
         var server = computer.getLevel().getServer();
-        computer.mount("rom/pxboot/certs", ComputerCraftAPI.createSaveDirMount(server, "certs", 0), "certs");
+        mountPath = computer.mount("rom/pxboot/certs", ComputerCraftAPI.createSaveDirMount(server, "certs", 0), "certs");
         PublicKey pk = null;
         if (rootKey == null) {
             var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("root.key").toFile();
@@ -197,6 +195,7 @@ public class CCSecureBootAPI implements ILuaAPI {
                     var signer = csbuilder.build(rootKey);
                     var csr = csrbuilder.build(signer);
                     rootCertificate = sign(csr, rootKey);
+                    file.getParentFile().mkdirs();
                     PemWriter writer = new PemWriter(new FileWriter(file));
                     writer.writeObject(new PemObject("CERTIFICATE", rootCertificate.getEncoded()));
                     writer.close();
@@ -204,6 +203,14 @@ public class CCSecureBootAPI implements ILuaAPI {
                     CCSecureBoot.LOG.error("Could not create certificate: {}", e.getMessage());
                 }
             }
+        }
+    }
+
+    @Override
+    public void shutdown() {
+        ILuaAPI.super.shutdown();
+        if (mountPath != null) {
+            computer.unmount(mountPath);
         }
     }
 

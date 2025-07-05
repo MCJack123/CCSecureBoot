@@ -21,6 +21,9 @@ dependencies {
 
     common(project(path: ":common", configuration: "namedElements")) { transitive false }
     shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
+    include "org.bouncycastle:bcpkix-jdk18on:1.81"
+    include "org.bouncycastle:bcprov-jdk18on:1.81"
+    include "org.bouncycastle:bcutil-jdk18on:1.81"
 
     // Fabric Loom
     modCompileOnly("cc.tweaked:cc-tweaked-$minecraft_version-fabric-api:$cctVersion")

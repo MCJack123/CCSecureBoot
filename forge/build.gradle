@@ -25,6 +25,9 @@ dependencies {
 
     common(project(path: ":common", configuration: "namedElements")) { transitive false }
     shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
+    include "org.bouncycastle:bcpkix-jdk18on:1.81"
+    include "org.bouncycastle:bcprov-jdk18on:1.81"
+    include "org.bouncycastle:bcutil-jdk18on:1.81"
 
     // Forge Gradle
     compileOnly("cc.tweaked:cc-tweaked-$minecraft_version-core-api:$cctVersion")
@@ -38,6 +41,8 @@ dependencies {
     forgeRuntimeLibrary "io.netty:netty-codec-socks:4.1.82.Final"
     forgeRuntimeLibrary "io.netty:netty-handler-proxy:4.1.82.Final"
     forgeRuntimeLibrary "org.bouncycastle:bcpkix-jdk18on:1.81"
+    forgeRuntimeLibrary "org.bouncycastle:bcprov-jdk18on:1.81"
+    forgeRuntimeLibrary "org.bouncycastle:bcutil-jdk18on:1.81"
 }
 
 processResources {

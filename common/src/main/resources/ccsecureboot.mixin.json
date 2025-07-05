@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cc.madefor.phoenix.ccsecureboot.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["ServerContextAccessor"],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

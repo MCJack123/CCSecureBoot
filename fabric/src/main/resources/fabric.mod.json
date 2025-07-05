@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "ccsecureboot",
+  "version": "${version}",
+
+  "name": "CCSecureBoot",
+  "description": "Implements boot security in CC: Tweaked.",
+  "authors": ["JackMacWindows"],
+  "contact": {},
+
+  "license": "Mozilla Public License 2.0",
+  "icon": "icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "cc.madefor.phoenix.ccsecureboot.fabric.CCSecureBootFabric"
+    ]
+  },
+  "mixins": [
+    "ccsecureboot.mixin.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.14",
+    "minecraft": ">=1.20.1",
+    "computercraft": ">=1.114.0"
+  }
+}

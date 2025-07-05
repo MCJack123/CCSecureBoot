@@ -53,6 +53,7 @@ public class CCSecureBootAPI implements ILuaAPI {
         if (rootKey == null) {
             throw new LuaException("An error occurred while loading the root key; check the server logs for more information.");
         }
+        // TODO: should probably check if the computer is already enrolled?
         try {
             var bytes = new byte[pem.remaining()];
             pem.get(bytes);
@@ -92,6 +93,7 @@ public class CCSecureBootAPI implements ILuaAPI {
         if (rootCertificate == null) {
             return MethodResult.of(false, "An error occurred while loading the root certificate; check the server logs for more information.");
         }
+        // TODO: should probably check if the computer is already unenrolled?
         try {
             var certbytes = new byte[certbuf.remaining()];
             certbuf.get(certbytes);

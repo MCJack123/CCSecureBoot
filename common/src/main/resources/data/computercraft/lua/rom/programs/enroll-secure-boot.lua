@@ -2,6 +2,11 @@ local libcert = require "cert"
 local random = require "ccryptolib.random"
 local secureboot = require "secureboot"
 
+if fs.exists("/rom/pxboot/certs/enrolled/" .. os.computerID()) then
+    printError("This computer is already enrolled in secure boot. Use unenroll-secure-boot to unenroll first.")
+    return
+end
+
 print("Enrolling in secure boot will require all boot scripts to be signed with a key to be able to run on this computer. This ensures that nobody but you can place code on your computer. The key will be saved on a floppy disk for safekeeping.")
 term.setTextColor(colors.yellow)
 print("Be aware that secure boot only protects the path up to your code. It is up to you to make sure your code can't be terminated or run untrusted code.")

@@ -3,6 +3,7 @@ package cc.madefor.phoenix.ccsecureboot;
 import cc.madefor.phoenix.ccsecureboot.mixin.ServerContextAccessor;
 import dan200.computercraft.api.ComputerCraftAPI;
 import dan200.computercraft.api.lua.*;
+import net.minecraft.server.MinecraftServer;
 import org.apache.commons.io.input.NullInputStream;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.ASN1OctetString;
@@ -25,6 +26,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.security.auth.x500.X500Principal;
 import java.io.*;
+import java.lang.ref.WeakReference;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +42,7 @@ public class CCSecureBootAPI implements ILuaAPI {
     private static @Nullable Certificate rootCertificate = null;
     private static @Nullable PrivateKey rootKey = null;
     private static @Nullable X509CRLHolder rootCRL = null;
+    private static WeakReference<MinecraftServer> mcServer = new WeakReference<>(null);
     private static final Object rootKeyLock = new Object();
     private static final Object rootCRLLock = new Object();
 
@@ -163,6 +166,12 @@ public class CCSecureBootAPI implements ILuaAPI {
         var server = computer.getLevel().getServer();
         mountPath = computer.mount("rom/pxboot/certs", ComputerCraftAPI.createSaveDirMount(server, "certs", 0), "certs");
         synchronized (rootKeyLock) {
+            if (!mcServer.refersTo(server)) {
+                rootKey = null;
+                rootCertificate = null;
+                rootCRL = null;
+                mcServer = new WeakReference<>(server);
+            }
             PublicKey pk = null;
             if (rootKey == null) {
                 var file = server.getWorldPath(ServerContextAccessor.getFolder()).resolve("root.key").toFile();

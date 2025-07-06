@@ -3,7 +3,7 @@ plugins {
 }
 architectury {
     platformSetupLoomIde()
-    forge()
+    neoForge()
 }
 
 configurations {
@@ -11,35 +11,32 @@ configurations {
     shadowCommon // Don't use shadow from the shadow plugin because we don't want IDEA to index this.
     compileClasspath.extendsFrom common
     runtimeClasspath.extendsFrom common
-    developmentForge.extendsFrom common
+    developmentNeoForge.extendsFrom common
 }
 
-loom {
-    forge {
-        mixinConfig "ccsecureboot.mixin.json"
-    }
+repositories {
+    maven { url "https://maven.neoforged.net/releases/" }
 }
 
 dependencies {
-    forge "net.minecraftforge:forge:${rootProject.forge_version}"
+    neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
 
     common(project(path: ":common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionForge")) { transitive = false }
+    shadowCommon(project(path: ":common", configuration: "transformProductionNeoForge")) { transitive = false }
     include "org.bouncycastle:bcpkix-jdk18on:1.81"
     include "org.bouncycastle:bcprov-jdk18on:1.81"
     include "org.bouncycastle:bcutil-jdk18on:1.81"
 
     // Forge Gradle
-    compileOnly("cc.tweaked:cc-tweaked-$minecraft_version-core-api:$cctVersion")
-    modCompileOnly("cc.tweaked:cc-tweaked-$minecraft_version-forge-api:$cctVersion")
-    modRuntimeOnly("cc.tweaked:cc-tweaked-$minecraft_version-forge:$cctVersion")
+    compileOnly("cc.tweaked:cc-tweaked-$minecraft_version-forge-api:$cctVersion")
+    runtimeOnly("cc.tweaked:cc-tweaked-$minecraft_version-forge:$cctVersion")
 
     // Fixes missing deps on Architectury Loom (architectury/architectury-loom#201)
-    forgeRuntimeLibrary "cc.tweaked:cobalt:0.9.6"
-    forgeRuntimeLibrary "com.jcraft:jzlib:1.1.3"
-    forgeRuntimeLibrary "io.netty:netty-codec-http:4.1.82.Final"
-    forgeRuntimeLibrary "io.netty:netty-codec-socks:4.1.82.Final"
-    forgeRuntimeLibrary "io.netty:netty-handler-proxy:4.1.82.Final"
+//    forgeRuntimeLibrary "cc.tweaked:cobalt:0.9.6"
+//    forgeRuntimeLibrary "com.jcraft:jzlib:1.1.3"
+//    forgeRuntimeLibrary "io.netty:netty-codec-http:4.1.82.Final"
+//    forgeRuntimeLibrary "io.netty:netty-codec-socks:4.1.82.Final"
+//    forgeRuntimeLibrary "io.netty:netty-handler-proxy:4.1.82.Final"
     forgeRuntimeLibrary "org.bouncycastle:bcpkix-jdk18on:1.81"
     forgeRuntimeLibrary "org.bouncycastle:bcprov-jdk18on:1.81"
     forgeRuntimeLibrary "org.bouncycastle:bcutil-jdk18on:1.81"
@@ -48,7 +45,7 @@ dependencies {
 processResources {
     inputs.property "version", project.version
 
-    filesMatching("META-INF/mods.toml") {
+    filesMatching("META-INF/neoforge.mods.toml") {
         expand "version": project.version
     }
 }

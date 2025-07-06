@@ -1,8 +1,7 @@
 package cc.madefor.phoenix.ccsecureboot.forge;
 
 import cc.madefor.phoenix.ccsecureboot.CCSecureBoot;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.neoforged.fml.common.Mod;
 
 @Mod(CCSecureBoot.MOD_ID)
 public class CCSecureBootForge {

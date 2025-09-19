@@ -110,6 +110,7 @@ public class CCSecureBootAPI implements ILuaAPI {
             var reader = new PemReader(new InputStreamReader(new ByteArrayInputStream(certbytes)));
             var certdata = reader.readPemObject();
             reader.close();
+            
             var cert = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(certdata.getContent()));
             synchronized (rootCRLLock) {
                 if (rootCRL != null && rootCRL.getRevokedCertificate(cert.getSerialNumber()) != null) {
@@ -296,8 +297,6 @@ public class CCSecureBootAPI implements ILuaAPI {
 
     // https://www.baeldung.com/java-bouncy-castle-sign-csr
     private X509Certificate sign(PKCS10CertificationRequest inputCSR, PrivateKey caPrivate) throws IOException, OperatorCreationException, CertificateException, NoSuchProviderException, NoSuchAlgorithmException, InvalidKeySpecException {
-        var keyInfo = inputCSR.getSubjectPublicKeyInfo();
-
         var serial = new byte[32];
         SecureRandom.getInstanceStrong().nextBytes(serial);
         var myCertificateGenerator = new X509v3CertificateBuilder(
@@ -306,7 +305,7 @@ public class CCSecureBootAPI implements ILuaAPI {
             new Date(System.currentTimeMillis()),
             new Date(System.currentTimeMillis() + 30L * 365 * 24 * 60 * 60 * 1000),
             inputCSR.getSubject(),
-            keyInfo);
+            inputCSR.getSubjectPublicKeyInfo());
 
         var sigGen = new JcaContentSignerBuilder("Ed25519").build(caPrivate);
 

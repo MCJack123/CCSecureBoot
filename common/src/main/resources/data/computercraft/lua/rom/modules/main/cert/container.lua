@@ -977,7 +977,7 @@ algorithm_list[container.passwordBasedEncryptionSchemeOIDs.PBES2] = {{"pbes2Para
 ---@return string type The type of the data as defined in the ASCII armor
 function container.decodePEM(data)
     local type = data:match("^%-%-%-%-%-BEGIN ([^%-]+)")
-    local retval = base64_decode(data:match("%-%-%-%-%-BEGIN [^%-]+%-%-%-%-%-\n(.+)\n%-%-%-%-%-END [^%-]+%-%-%-%-%-"):gsub("[^A-Za-z0-9/+=]", ""))
+    local retval = base64_decode(data:match("%-%-%-%-%-BEGIN [^%-]+%-%-%-%-%-\r?\n(.+)\r?\n%-%-%-%-%-END [^%-]+%-%-%-%-%-"):gsub("[^A-Za-z0-9/+=]", ""))
     return retval, type
 end
 

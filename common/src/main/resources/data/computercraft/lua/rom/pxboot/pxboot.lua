@@ -38,11 +38,13 @@ local function unbios(path, ...)
         native[method] = _G.term[method]
     end
     _G.term = native
-    _G.http.checkURL = _G.http.checkURLAsync
-    _G.http.websocket = _G.http.websocketAsync
+    if _G.http then
+        _G.http.checkURL = _G.http.checkURLAsync
+        _G.http.websocket = _G.http.websocketAsync
+    end
     if _G.commands then _G.commands = _G.commands.native end
     if _G.turtle then _G.turtle.native, _G.turtle.craft = nil end
-    local delete = {os = {"version", "pullEventRaw", "pullEvent", "run", "loadAPI", "unloadAPI", "sleep"}, http = {"get", "post", "put", "delete", "patch", "options", "head", "trace", "listen", "checkURLAsync", "websocketAsync"}, fs = {"complete", "isDriveRoot"}}
+    local delete = {os = {"version", "pullEventRaw", "pullEvent", "run", "loadAPI", "unloadAPI", "sleep"}, http = _G.http and {"get", "post", "put", "delete", "patch", "options", "head", "trace", "listen", "checkURLAsync", "websocketAsync"}, fs = {"complete", "isDriveRoot"}}
     for k,v in pairs(delete) do for _,a in ipairs(v) do _G[k][a] = nil end end
     -- Set up TLCO
     -- This functions by crashing `rednet.run` by removing `os.pullEventRaw`. Normally
@@ -121,7 +123,7 @@ local function unbios(path, ...)
         end
         restoreValue(_G, "loadstring", "nativeloadstring", 1)
         restoreValue(_G, "load", "nativeload", 5)
-        restoreValue(http, "request", "nativeHTTPRequest", 3)
+        if http then restoreValue(http, "request", "nativeHTTPRequest", 3) end
         restoreValue(os, "shutdown", "nativeShutdown", 1)
         restoreValue(os, "reboot", "nativeReboot", 1)
         if turtle then

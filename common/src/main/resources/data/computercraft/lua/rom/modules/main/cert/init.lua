@@ -17,10 +17,12 @@ local libcert = {
 
 --- Generates an Ed25519 and PKCS#8 private key for signing, optionally encrypted with a password.
 ---@param password? string A password to encrypt the key with
+---@param iter? number The number of iterations for password hashing (default 4096, should be tuned to ~2-3 seconds to hash)
 ---@return string key The generated private key
 ---@return string pk8 The PEM-encoded PKCS#8 key container for the key
-function libcert.generatePrivateKeyForSigning(password)
+function libcert.generatePrivateKeyForSigning(password, iter)
     expect(1, password, "string", "nil")
+    expect(2, iter, "number", "nil")
     local key = random.random(32)
     ---@type PKCS8
     local pk8 = {
@@ -29,7 +31,7 @@ function libcert.generatePrivateKeyForSigning(password)
         privateKey = key
     }
     if password then
-        return key, container.encodePEM(container.savePKCS8Encrypted(crypto.encryptKey(pk8, password)), "ENCRYPTED PRIVATE KEY")
+        return key, container.encodePEM(container.savePKCS8Encrypted(crypto.encryptKey(pk8, password, nil, iter)), "ENCRYPTED PRIVATE KEY")
     else return key, container.encodePEM(container.savePKCS8(pk8), "PRIVATE KEY") end
 end
 

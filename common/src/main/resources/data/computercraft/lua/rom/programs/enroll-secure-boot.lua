@@ -1,6 +1,8 @@
 local libcert = require "cert"
+libcert.util = require "cert.util"
 local random = require "ccryptolib.random"
 local secureboot = require "secureboot"
+local sha2 = require "sha2"
 
 if fs.exists("/rom/pxboot/certs/enrolled/" .. os.computerID()) then
     printError("This computer is already enrolled in secure boot. Use unenroll-secure-boot to unenroll first.")
@@ -33,10 +35,29 @@ if not fs.isDir("/disk") then
     print("Please insert a floppy disk into an attached disk drive. This disk will become the key for the computer.")
     while not fs.isDir("/disk") do os.pullEvent("disk") end
 end
-    
+
+local iter
+if password then
+    print("Tuning password hash speed, please wait...")
+    iter = 128
+    local sha2_hmac, sha2_sha256, string_char, string_byte, table_unpack = sha2.hmac, sha2.sha256, string.char, string.byte, table.unpack
+    repeat
+    	iter = iter * 2
+    	sleep(0)
+    	local start = os.epoch "utc"
+    	if not pcall(libcert.util.pbkdf2, function(d, k) return {string_byte(sha2_hmac(sha2_sha256, k, string_char(table_unpack(d))), 1, -1)} end, 32, password, "saltdoesntmatter", iter, 32) then
+            iter = iter / 2
+    	    break
+    	end
+        print(iter, os.epoch "utc" - start)
+    until os.epoch "utc" - start > 2000
+    sleep(0)
+end
+
 print("Generating key...")
 random.initWithTiming()
-local key, pk8 = libcert.generatePrivateKeyForSigning(password)
+local key, pk8 = libcert.generatePrivateKeyForSigning(password, iter)
+sleep(0)
 print("Saving key...")
 local file, err = fs.open("/disk/secure-boot-" .. os.computerID() .. ".key", "wb")
 if not file then
@@ -45,6 +66,7 @@ if not file then
 end
 file.write(pk8)
 file.close()
+sleep(0)
 print("Generating certificate request...")
 local pk10 = libcert.generateCSR(pk8, {
     [libcert.container.nameOIDs.commonName] = name,

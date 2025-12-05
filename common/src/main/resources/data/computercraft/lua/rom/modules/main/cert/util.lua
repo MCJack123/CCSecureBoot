@@ -44,6 +44,7 @@ function util.pbkdf2(hmac, hashlen, pass, salt, iter, dklen)
     local block = 1
     local out = {}
 
+	local start = os.epoch "utc"
     while dklen > 0 do
         local ikey = {}
         local isalt = {upack(salt)}
@@ -57,12 +58,17 @@ function util.pbkdf2(hmac, hashlen, pass, salt, iter, dklen)
         for j = 1, iter do
             isalt = hmac(isalt, pass)
             for k = 1, clen do ikey[k] = bxor(isalt[k], ikey[k] or 0) end
+            if j % 100 == 0 and os.epoch "utc" - start > 5000 then
+                sleep(0)
+                start = os.epoch "utc"
+            end
         end
         dklen = dklen - clen
         block = block+1
-        for k = 1, clen do out[#out+1] = ikey[k] end
+        for k = 1, clen do out[#out + 1] = ikey[k] end
     end
 
+	sleep(0)
     return string.char(upack(out))
 end
 

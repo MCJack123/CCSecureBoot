@@ -7,6 +7,8 @@ local x25519 = require "ccryptolib.x25519"
 local aes = require "aes"
 local sha2 = require "sha2"
 
+local string_char, string_byte, table_unpack, sha2_hmac = string.char, string.byte, table.unpack, sha2.hmac
+
 local crypto = {}
 
 ---@alias KeyEncryptor {encrypt: (fun(key: string): RecipientInfo), decrypt: (fun(enc: RecipientInfo): string|nil)}
@@ -310,7 +312,7 @@ function crypto.encryptKey(pk8, password, hasher, iter)
         pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.prf.type = container.pseudoRandomFunctionOIDs.HMAC_SHA512_256
         hl = 32
     else error("Unknown hashing algorithm", 2) end
-    local key = util.pbkdf2(function(d, k) return {sha2.hmac(hasher, k, string.char(table.unpack(d))):byte(1, -1)} end, hl, password, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.salt.specified, iter or 4096, 32)
+    local key = util.pbkdf2(function(d, k) return {string_byte(sha2_hmac(hasher, k, string_char(table_unpack(d))), 1, -1)} end, hl, password, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.salt.specified, iter or 4096, 32)
     pk8e.encryptedData = aes.TableToString(aes.EncryptCBC(util.pkcs7pad(aes.StringToTable(data), 16), aes.StringToTable(key), aes.StringToTable(pk8e.encryptionAlgorithm.pbes2Parameters.encryptionScheme.iv)))
     return pk8e
 end
@@ -351,7 +353,7 @@ function crypto.decryptKey(pk8e, password)
     elseif et == container.encryptionAlgorithmOIDs.AES192_CBC then kl = 24
     elseif et == container.encryptionAlgorithmOIDs.AES256_CBC then kl = 32
     else error("Unknown encryption algorithm", 2) end
-    local key = util.pbkdf2(function(d, k) return {sha2.hmac(hasher, k, string.char(table.unpack(d))):byte(1, -1)} end, hl, password, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.salt.specified, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.iterationCount, kl)
+    local key = util.pbkdf2(function(d, k) return {string_byte(sha2_hmac(hasher, k, string_char(table_unpack(d))), 1, -1)} end, hl, password, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.salt.specified, pk8e.encryptionAlgorithm.pbes2Parameters.keyDerivationFunc.pbkdf2Parameters.iterationCount, kl)
     return container.loadPKCS8(aes.TableToString(util.pkcs7unpad(aes.DecryptCBC(aes.StringToTable(pk8e.encryptedData), aes.StringToTable(key), aes.StringToTable(pk8e.encryptionAlgorithm.pbes2Parameters.encryptionScheme.iv)))))
 end
 
